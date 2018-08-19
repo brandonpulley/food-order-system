@@ -1,24 +1,40 @@
 import sys
 import threading
-from datetime import datetime
 from time import sleep
-
-NAME = 'name'
-TEMP = 'temp'
-SHELF_LIFE = 'shelfLife'
-DECAY_RATE = 'decayRate'
+from system.food_order import FoodOrder
 
 HOT_MAX_COUNT = 15
 COLD_MAX_COUNT = 15
 FROZEN_MAX_COUNT = 15
 OVERFLOW_MAX_COUNT = 20
 
+VALUE = 'value'
+TYPE = 'type'
+INDEX = 'index'
+MAX = 'max'
+ORDERS = 'orders'
+OVERFLOW = 'overflow'
 TEMP_HOT = 'hot'
 TEMP_COLD = 'cold'
 TEMP_FROZEN = 'frozen'
 
+FOOD_ORDER_TIME_DIFF = 0.25
 
-FOOD_ORDER_TIME_DIFF = 0.05
+_shelves = {
+    TEMP_HOT: {
+        ORDERS: [],
+        MAX: HOT_MAX_COUNT
+    },
+    TEMP_COLD: {
+        ORDERS: [],
+        MAX: COLD_MAX_COUNT
+    },
+    TEMP_FROZEN: {
+        ORDERS: [],
+        MAX: FROZEN_MAX_COUNT
+    }
+}
+
 
 def add_orders(orders_json_array: []):
     for order_dict in orders_json_array:
@@ -26,7 +42,8 @@ def add_orders(orders_json_array: []):
         _add_order(order_dict)
 
         sys.stdout.flush()
-    return {'shelves': _food_holder.shelves}
+    return {'shelves': _food_holder.shelves,
+            'waste_bucket': _food_holder.waste_bucket}
 
 
 def _add_order(order: dict):
@@ -36,69 +53,12 @@ def _add_order(order: dict):
     print('adding order:: ', food_order.to_json())
 
 
-TIME_ENTERED = 'time_entered'
-
-class FoodOrder:
-
-    def __init__(self, **kwargs):
-        self.name = kwargs.get(NAME)
-        self.temp = kwargs.get(TEMP)
-        self.shelf_life = kwargs.get(SHELF_LIFE)
-        self.decay_rate = kwargs.get(DECAY_RATE)
-        self.order_entered_time = kwargs.get(TIME_ENTERED, datetime.now())
-
-    def current_value(self, is_overflow=False):
-        current_time_millis = datetime.now()
-        seconds_since_ordered = (self.order_entered_time -
-                                 current_time_millis).total_seconds()
-        if is_overflow:
-            current_value = (self.shelf_life - seconds_since_ordered) - \
-                            (self.decay_rate * seconds_since_ordered * 2)
-        else:
-            current_value = (self.shelf_life - seconds_since_ordered) - \
-                            (self.decay_rate * seconds_since_ordered)
-        return current_value
-
-    def to_json(self):
-        return {
-            NAME: self.name,
-            TEMP: self.temp,
-            SHELF_LIFE: self.shelf_life,
-            DECAY_RATE: self.decay_rate,
-            TIME_ENTERED: self.order_entered_time
-        }
-
-
-
-MAX = 'max'
-ORDERS = 'orders'
-OVERFLOW = 'overflow'
-
-_shelves = {
-    'hot': {
-        ORDERS: [],
-        MAX: HOT_MAX_COUNT
-    },
-    'cold': {
-        ORDERS: [],
-        MAX: COLD_MAX_COUNT
-    },
-    'frozen': {
-        ORDERS: [],
-        MAX: FROZEN_MAX_COUNT
-    }
-}
-
-
-# keys for internal use
-VALUE = 'value'
-TYPE = 'type'
-INDEX = 'index'
-
 class FoodHolder:
 
+    # locks for multithreading
     add_lock = threading.Lock()
     get_lock = threading.Lock()
+    # default overflow shelf
     _overflow_shelf = {
         OVERFLOW: {
                 ORDERS: [],
@@ -118,7 +78,18 @@ class FoodHolder:
         finally:
             self.add_lock.release()
 
+    def _remove_zero_value_orders(self):
+        for key, shelf in self.shelves.items():
+            for idx, item in enumerate(shelf[ORDERS]):
+                food_item = FoodOrder(**item)
+                if food_item.current_value() <= 0:
+                    shelf[ORDERS].pop(idx)
+
+
+
     def _add_food_order(self, food_order):
+        self._remove_zero_value_orders()
+
         shelf_type = food_order.temp
 
         if shelf_type not in self.shelves:
@@ -129,61 +100,58 @@ class FoodHolder:
             if len(shelf[ORDERS]) >= shelf[MAX]:
                 self._add_order_to_overflow(food_order)
             else:
-                print('not overflow yet......')
                 shelf[ORDERS].append(food_order.to_json())
                 self.shelves[shelf_type] = shelf
 
     def _add_order_to_overflow(self, order):
-        # TODO add to overflow shelf
-        print('adding this to overflow')
+
         order_type = order.temp
+
         if len(self.shelves[OVERFLOW][ORDERS]) >= \
                 self.shelves[OVERFLOW][MAX]:
-            removed_type = self._remove_decayed_order(order_type)
-
-            if removed_type == OVERFLOW:
-                shelf = self.shelves[OVERFLOW]
-                shelf[ORDERS].append(order.to_json())
-                self.shelves[OVERFLOW][ORDERS] = shelf[ORDERS]
-            else:
-                shelf = self.shelves[order_type]
-                shelf[ORDERS].append(order.to_json())
-                self.shelves[order_type][ORDERS] = shelf[ORDERS]
+            add_shelf_type = self._remove_decayed_order(order_type)
         else:
-            shelf = self.shelves[OVERFLOW]
-            shelf[ORDERS].append(order.to_json())
-            self.shelves[OVERFLOW][ORDERS] = shelf[ORDERS]
+            add_shelf_type = OVERFLOW
 
-    def _remove_least_valued_item(self, shelf_type):
+        shelf = self.shelves[add_shelf_type]
+        shelf[ORDERS].append(order.to_json())
+        self.shelves[order_type][ORDERS] = shelf[ORDERS]
+
+    def _find_least_valued_item(self, shelf_type):
+        """
+        Finds the order with the least value from either the given shelf type
+        or from the overflow shelf, whichever contains the least-valued item
+        :param shelf_type: the shelf type to include in the search
+        :return: the item with the least value
+        """
+
         least_valued = {}
 
-        for idx, item_thing in enumerate(self.shelves[shelf_type][ORDERS]):
+        for idx, item in enumerate(self.shelves[shelf_type][ORDERS]):
 
-            item = FoodOrder(**item_thing)
+            food_item = FoodOrder(**item)
 
             if not least_valued or \
-                    least_valued[VALUE] > item.current_value():
+                    least_valued[VALUE] > food_item.current_value():
                 least_valued[TYPE] = shelf_type
-                least_valued[VALUE] = item.current_value()
+                least_valued[VALUE] = food_item.current_value()
                 least_valued[INDEX] = idx
-        for idx, item_thing in enumerate(self.shelves[OVERFLOW][ORDERS]):
+        for idx, item in enumerate(self.shelves[OVERFLOW][ORDERS]):
 
-            item = FoodOrder(**item_thing)
+            food_item = FoodOrder(**item)
 
             if not least_valued or \
                     least_valued[VALUE] > \
-                    item.current_value(is_overflow=True):
+                    food_item.current_value(is_overflow=True):
                 least_valued[TYPE] = OVERFLOW
-                least_valued[VALUE] = item.current_value()
+                least_valued[VALUE] = food_item.current_value()
                 least_valued[INDEX] = idx
         return least_valued
 
     def _remove_decayed_order(self, order_type):
-        # TODO: remove the least-valued item in the order_type / overflow shelf
-        # find least-valued item in order_type and overflow, remove it
-        least_valued_item = self._remove_least_valued_item(order_type)
+        least_valued_item = self._find_least_valued_item(order_type)
 
-        print('removing this order:: ', least_valued_item)
+        print('removing this item:: ', least_valued_item)
 
         waste_item = self.shelves[least_valued_item[TYPE]][ORDERS]\
             .pop(least_valued_item[INDEX])
