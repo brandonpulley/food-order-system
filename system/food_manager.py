@@ -26,8 +26,7 @@ def add_orders(orders_json_array: []):
         _add_order(order_dict)
 
         sys.stdout.flush()
-    return {'shelves': _food_holder.shelves,
-            'overflow': _food_holder.overflow_shelf}
+    return {'shelves': _food_holder.shelves}
 
 
 def _add_order(order: dict):
@@ -91,11 +90,16 @@ _shelves = {
 }
 
 
+# keys for internal use
+VALUE = 'value'
+TYPE = 'type'
+INDEX = 'index'
+
 class FoodHolder:
 
     add_lock = threading.Lock()
     get_lock = threading.Lock()
-    overflow_shelf = {
+    _overflow_shelf = {
         OVERFLOW: {
                 ORDERS: [],
                 MAX: OVERFLOW_MAX_COUNT
@@ -105,6 +109,7 @@ class FoodHolder:
     def __init__(self, shelves):
         self.shelves = shelves
         self.waste_bucket = []
+        self.shelves[OVERFLOW] = self._overflow_shelf[OVERFLOW]
 
     def add_food_order(self, food_order: FoodOrder):
         self.add_lock.acquire()
@@ -132,26 +137,24 @@ class FoodHolder:
         # TODO add to overflow shelf
         print('adding this to overflow')
         order_type = order.temp
-        if len(self.overflow_shelf[OVERFLOW][ORDERS]) >= \
-                self.overflow_shelf[OVERFLOW][MAX]:
+        if len(self.shelves[OVERFLOW][ORDERS]) >= \
+                self.shelves[OVERFLOW][MAX]:
             removed_type = self._remove_decayed_order(order_type)
 
             if removed_type == OVERFLOW:
-                shelf = self.overflow_shelf[OVERFLOW]
+                shelf = self.shelves[OVERFLOW]
                 shelf[ORDERS].append(order.to_json())
-                self.overflow_shelf[OVERFLOW][ORDERS] = shelf[ORDERS]
+                self.shelves[OVERFLOW][ORDERS] = shelf[ORDERS]
             else:
                 shelf = self.shelves[order_type]
                 shelf[ORDERS].append(order.to_json())
                 self.shelves[order_type][ORDERS] = shelf[ORDERS]
         else:
-            shelf = self.overflow_shelf[OVERFLOW]
+            shelf = self.shelves[OVERFLOW]
             shelf[ORDERS].append(order.to_json())
-            self.overflow_shelf[OVERFLOW][ORDERS] = shelf[ORDERS]
+            self.shelves[OVERFLOW][ORDERS] = shelf[ORDERS]
 
-
-
-    def _get_least_valued_item_from_shelf(self, shelf_type):
+    def _remove_least_valued_item(self, shelf_type):
         least_valued = {}
 
         for idx, item_thing in enumerate(self.shelves[shelf_type][ORDERS]):
@@ -159,39 +162,35 @@ class FoodHolder:
             item = FoodOrder(**item_thing)
 
             if not least_valued or \
-                    least_valued['value'] > item.current_value():
-                least_valued['type'] = shelf_type
-                least_valued['value'] = item.current_value()
-                least_valued['index'] = idx
-        for idx, item_thing in enumerate(self.overflow_shelf[OVERFLOW][ORDERS]):
+                    least_valued[VALUE] > item.current_value():
+                least_valued[TYPE] = shelf_type
+                least_valued[VALUE] = item.current_value()
+                least_valued[INDEX] = idx
+        for idx, item_thing in enumerate(self.shelves[OVERFLOW][ORDERS]):
 
             item = FoodOrder(**item_thing)
 
             if not least_valued or \
-                    least_valued['value'] > \
+                    least_valued[VALUE] > \
                     item.current_value(is_overflow=True):
-                least_valued['type'] = OVERFLOW
-                least_valued['value'] = item.current_value()
-                least_valued['index'] = idx
+                least_valued[TYPE] = OVERFLOW
+                least_valued[VALUE] = item.current_value()
+                least_valued[INDEX] = idx
         return least_valued
 
     def _remove_decayed_order(self, order_type):
         # TODO: remove the least-valued item in the order_type / overflow shelf
         # find least-valued item in order_type and overflow, remove it
-        least_valued_item = self._get_least_valued_item_from_shelf(order_type)
+        least_valued_item = self._remove_least_valued_item(order_type)
 
         print('removing this order:: ', least_valued_item)
 
-        if least_valued_item['type'] == OVERFLOW:
-            waste_item = self.overflow_shelf[OVERFLOW][ORDERS]\
-                .pop(least_valued_item['index'])
-        else:
-            waste_item = self.shelves[least_valued_item['type']][ORDERS]\
-                .pop(least_valued_item['index'])
+        waste_item = self.shelves[least_valued_item[TYPE]][ORDERS]\
+            .pop(least_valued_item[INDEX])
 
         self.waste_bucket.append(waste_item)
 
-        return least_valued_item['type']
+        return least_valued_item[TYPE]
 
 
 _food_holder = FoodHolder(_shelves)
