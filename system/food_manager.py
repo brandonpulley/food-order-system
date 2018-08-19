@@ -41,7 +41,7 @@ _threads = []
 
 
 def add_orders(orders_json_array: []):
-    # start this in a background thread, why doncha
+
     dispatch_thread = threading.Thread(target=_dispatch_drivers)
     _threads.append(dispatch_thread)
     dispatch_thread.start()
@@ -60,8 +60,12 @@ def add_orders(orders_json_array: []):
     for thread in _threads:
         print('thread thingy::: ', str(thread))
 
+    while _food_holder.has_food():
+        print('still need to deliver some food.... just waiting here')
+
     return {'shelves': _food_holder.shelves,
-            'waste_bucket': _food_holder.waste_bucket}
+            'waste_bucket': _food_holder.waste_bucket,
+            'delivered': _food_holder.delivered_bucket}
 
 
 def _add_order(order: dict):
@@ -74,7 +78,7 @@ def _add_order(order: dict):
 def _deliver_order():
     print('this is where a driver would normally be dispatched...')
     # remove the least-valued item from the stack
-    _food_holder.remove_least_valued_order()
+    _food_holder.remove_least_valued_order(is_delivery=True)
 
 
 def _dispatch_drivers():
@@ -90,8 +94,7 @@ def _dispatch_drivers():
         driver_thread.start()
 
         if _food_holder.has_food():
-            food_check_expiration = datetime.now() + timedelta(seconds=5)
-
+            food_check_expiration = datetime.now() + timedelta(seconds=1)
 
 
 class FoodHolder:
@@ -110,6 +113,7 @@ class FoodHolder:
     def __init__(self, shelves):
         self.shelves = shelves
         self.waste_bucket = []
+        self.delivered_bucket = []
         self.shelves[OVERFLOW] = self._overflow_shelf[OVERFLOW]
 
     def add_food_order(self, food_order: FoodOrder):
@@ -126,16 +130,20 @@ class FoodHolder:
                 return True
         return False
 
-    def remove_least_valued_order(self, shelf_types: [] = None):
+    def remove_least_valued_order(self, shelf_types: [] = None,
+                                  is_delivery=False):
         least_valued_item = self._find_least_valued_item(shelf_types)
 
-        self.waste_bucket.append(
-            self.shelves[least_valued_item[TYPE]][ORDERS]
-                .pop(least_valued_item[INDEX])
-        )
-
-        print('okay, just removed this order:: ',
-              self.waste_bucket[len(self.waste_bucket)-1])
+        if is_delivery:
+            self.delivered_bucket.append(
+                self.shelves[least_valued_item[TYPE]][ORDERS]
+                    .pop(least_valued_item[INDEX])
+            )
+        else:
+            self.waste_bucket.append(
+                self.shelves[least_valued_item[TYPE]][ORDERS]
+                    .pop(least_valued_item[INDEX])
+            )
 
         return least_valued_item[TYPE]
 
@@ -200,17 +208,6 @@ class FoodHolder:
                     least_valued[VALUE] = food_item.current_value()
                     least_valued[INDEX] = idx
         return least_valued
-    #
-    # def _remove_least_valued_order(self, order_type):
-    #     least_valued_item = self._find_least_valued_item([order_type,
-    #                                                       OVERFLOW])
-    #
-    #     waste_item = self.shelves[least_valued_item[TYPE]][ORDERS]\
-    #         .pop(least_valued_item[INDEX])
-    #
-    #     self.waste_bucket.append(waste_item)
-    #
-    #     return least_valued_item[TYPE]
 
 
 _food_holder = FoodHolder(_shelves)
