@@ -42,9 +42,9 @@ _threads = []
 
 def add_orders(orders_json_array: []):
 
-    dispatch_thread = threading.Thread(target=_dispatch_drivers)
-    _threads.append(dispatch_thread)
-    dispatch_thread.start()
+    # dispatch_thread = threading.Thread(target=_dispatch_drivers)
+    # _threads.append(dispatch_thread)
+    # dispatch_thread.start()
 
     for order_dict in orders_json_array:
 
@@ -55,6 +55,8 @@ def add_orders(orders_json_array: []):
         order_thread.start()
 
         sys.stdout.flush()
+
+    _dispatch_drivers()
 
     # TODO: While loop to clean up running threads. print for now
     for thread in _threads:
@@ -76,7 +78,7 @@ def _add_order(order: dict):
 
 
 def _deliver_order():
-    print('this is where a driver would normally be dispatched...')
+    print('dispatching driver')
     # remove the least-valued item from the stack
     _food_holder.remove_least_valued_order(is_delivery=True)
 
@@ -95,6 +97,8 @@ def _dispatch_drivers():
 
         if _food_holder.has_food():
             food_check_expiration = datetime.now() + timedelta(seconds=1)
+
+        sys.stdout.flush()
 
 
 class FoodHolder:
