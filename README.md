@@ -56,8 +56,15 @@ groups: delivered items, overflow waste, and no-value items
 }
 ```
 
-## Tests
-To run unit tests run the following command
-```
-docker-compose run web pytest
-```
+The progress of the calculations are also present in the standard output.
+
+This output is sent to the docker container that is running this application.
+
+It will tell you when an order is added, when the order is removed because it
+has no value, when the order is removed because of too much food overflow, and
+when an item is delivered.
+
+Each statement will also display the order that has been added or removed
+
+When an order has been either added or delivered the contents of all of the
+shelves are printed out as well

@@ -71,7 +71,7 @@ def _add_order(order: dict):
 
     food_order = FoodOrder(**order)
     _food_holder.add_food_order(food_order)
-    print('adding order:: ', food_order.to_json())
+    print('adding order. Current state of shelves::\n', _food_holder.shelves)
 
 
 def _deliver_order():
@@ -80,6 +80,7 @@ def _deliver_order():
         is_delivery=True, is_highest=False)
     print('from this shelf: ', from_shelf,
           ', this item was delivered: ', delivered_item)
+    print('current state of shelves::\n', _food_holder.shelves)
 
 
 def _dispatch_drivers():
@@ -251,9 +252,9 @@ class FoodHolder:
     def _find_most_valued_item(self, shelf_types: [] = None):
         """
         Finds the order with the least value from either the given shelf type
-        or from the overflow shelf, whichever contains the least-valued item
+        or from the overflow shelf, whichever contains the most-valued item
         :param shelf_types: the shelf types to include in the search
-        :return: the item with the least value
+        :return: the item with the most value
         """
 
         if not shelf_types:
