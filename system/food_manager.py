@@ -60,13 +60,14 @@ def add_orders(orders_json_array: []):
 
     # TODO: While loop to clean up running threads. print for now
     for thread in _threads:
-        print('thread thingy::: ', str(thread))
+        pass
 
     while _food_holder.has_food():
         print('still need to deliver some food.... just waiting here')
 
     return {'shelves': _food_holder.shelves,
             'waste_bucket': _food_holder.waste_bucket,
+            'zero_value_bucket': _food_holder.zero_value_bucket,
             'delivered': _food_holder.delivered_bucket}
 
 
@@ -80,7 +81,7 @@ def _add_order(order: dict):
 def _deliver_order():
     print('dispatching driver')
     # remove the least-valued item from the stack
-    _food_holder.remove_most_valued_order(is_delivery=True)
+    _food_holder.remove_highest_lowest_order(is_delivery=True, is_highest=True)
 
 
 def _dispatch_drivers():
@@ -117,6 +118,7 @@ class FoodHolder:
     def __init__(self, shelves):
         self.shelves = shelves
         self.waste_bucket = []
+        self.zero_value_bucket = []
         self.delivered_bucket = []
         self.shelves[OVERFLOW] = self._overflow_shelf[OVERFLOW]
 
@@ -134,47 +136,44 @@ class FoodHolder:
                 return True
         return False
 
-    def remove_most_valued_order(self, shelf_types: [] = None,
-                                  is_delivery=False):
-        most_valued_item = self._find_most_valued_item(shelf_types)
+    def remove_highest_lowest_order(self, shelf_types: [] = None,
+                                    is_delivery=False, is_highest=False):
+        """
+        Remove the either the highest-valued item or the lowest-value item
+        :param shelf_types: The shelf types to search for the items in.
+        Default includes all available shelves
+        :param is_delivery: False for waste, True for delivery
+        :param is_highest: False for removing the lowest-priced item, True
+        for removing the highest-priced item
+        :return: The shelf-type of the item that was removed
+        """
+        self._remove_zero_value_orders()
+        if is_highest:
+            item_to_remove = self._find_most_valued_item(shelf_types)
+        else:
+            item_to_remove = self._find_least_valued_item(shelf_types)
 
         if is_delivery:
             self.delivered_bucket.append(
-                self.shelves[most_valued_item[TYPE]][ORDERS]
-                    .pop(most_valued_item[INDEX])
+                self.shelves[item_to_remove[TYPE]][ORDERS]
+                    .pop(item_to_remove[INDEX])
             )
         else:
             self.waste_bucket.append(
-                self.shelves[most_valued_item[TYPE]][ORDERS]
-                    .pop(most_valued_item[INDEX])
+                self.shelves[item_to_remove[TYPE]][ORDERS]
+                    .pop(item_to_remove[INDEX])
             )
 
-        return most_valued_item[TYPE]
-
-    def remove_least_valued_order(self, shelf_types: [] = None,
-                                  is_delivery=False):
-        least_valued_item = self._find_least_valued_item(shelf_types)
-
-        if is_delivery:
-            self.delivered_bucket.append(
-                self.shelves[least_valued_item[TYPE]][ORDERS]
-                    .pop(least_valued_item[INDEX])
-            )
-        else:
-            self.waste_bucket.append(
-                self.shelves[least_valued_item[TYPE]][ORDERS]
-                    .pop(least_valued_item[INDEX])
-            )
-
-        return least_valued_item[TYPE]
+        return item_to_remove[TYPE]
 
     def _remove_zero_value_orders(self):
         for key, shelf in self.shelves.items():
             for idx, item in enumerate(shelf[ORDERS]):
                 food_item = FoodOrder(**item)
                 if food_item.current_value() <= 0:
-                    self.waste_bucket.append(
+                    self.zero_value_bucket.append(
                         shelf[ORDERS].pop(idx))
+                    self.shelves[key] = shelf
 
     def _add_food_order(self, food_order):
         self._remove_zero_value_orders()
@@ -199,8 +198,8 @@ class FoodHolder:
 
         if len(self.shelves[OVERFLOW][ORDERS]) >= \
                 self.shelves[OVERFLOW][MAX]:
-            add_shelf_type = self.remove_least_valued_order([order_type,
-                                                             OVERFLOW])
+            add_shelf_type = self.remove_highest_lowest_order([order_type,
+                                                               OVERFLOW])
         else:
             add_shelf_type = OVERFLOW
 
