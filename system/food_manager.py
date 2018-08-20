@@ -80,7 +80,7 @@ def _add_order(order: dict):
 def _deliver_order():
     print('dispatching driver')
     # remove the least-valued item from the stack
-    _food_holder.remove_least_valued_order(is_delivery=True)
+    _food_holder.remove_most_valued_order(is_delivery=True)
 
 
 def _dispatch_drivers():
@@ -134,6 +134,23 @@ class FoodHolder:
                 return True
         return False
 
+    def remove_most_valued_order(self, shelf_types: [] = None,
+                                  is_delivery=False):
+        most_valued_item = self._find_most_valued_item(shelf_types)
+
+        if is_delivery:
+            self.delivered_bucket.append(
+                self.shelves[most_valued_item[TYPE]][ORDERS]
+                    .pop(most_valued_item[INDEX])
+            )
+        else:
+            self.waste_bucket.append(
+                self.shelves[most_valued_item[TYPE]][ORDERS]
+                    .pop(most_valued_item[INDEX])
+            )
+
+        return most_valued_item[TYPE]
+
     def remove_least_valued_order(self, shelf_types: [] = None,
                                   is_delivery=False):
         least_valued_item = self._find_least_valued_item(shelf_types)
@@ -166,13 +183,15 @@ class FoodHolder:
 
         if shelf_type not in self.shelves:
             pass
+
+        shelf = self.shelves[shelf_type]
+
+        if len(shelf[ORDERS]) >= shelf[MAX]:
+            self._add_order_to_overflow(food_order)
         else:
-            shelf = self.shelves[shelf_type]
-            if len(shelf[ORDERS]) >= shelf[MAX]:
-                self._add_order_to_overflow(food_order)
-            else:
-                shelf[ORDERS].append(food_order.to_json())
-                self.shelves[shelf_type] = shelf
+            shelf[ORDERS].append(food_order.to_json())
+
+            self.shelves[shelf_type] = shelf
 
     def _add_order_to_overflow(self, order):
 
@@ -187,11 +206,11 @@ class FoodHolder:
 
         shelf = self.shelves[add_shelf_type]
         shelf[ORDERS].append(order.to_json())
-        self.shelves[order_type][ORDERS] = shelf[ORDERS]
+        self.shelves[add_shelf_type][ORDERS] = shelf[ORDERS]
 
     def _find_least_valued_item(self, shelf_types: [] = None):
         """
-        Finds the order with the least value from either the given shelf type
+        Finds the order with the most value from either the given shelf type
         or from the overflow shelf, whichever contains the least-valued item
         :param shelf_type: the shelf type to include in the search
         :return: the item with the least value
@@ -212,6 +231,31 @@ class FoodHolder:
                     least_valued[VALUE] = food_item.current_value()
                     least_valued[INDEX] = idx
         return least_valued
+
+    def _find_most_valued_item(self, shelf_types: [] = None):
+        """
+        Finds the order with the least value from either the given shelf type
+        or from the overflow shelf, whichever contains the least-valued item
+        :param shelf_type: the shelf type to include in the search
+        :return: the item with the least value
+        """
+
+        if not shelf_types:
+            print('looking through all shelves')
+            shelf_types = [key for key in self.shelves.keys()]
+
+        most_valued = {}
+        for shelf_type in shelf_types:
+
+            for idx, item in enumerate(self.shelves[shelf_type][ORDERS]):
+
+                food_item = FoodOrder(**item)
+                if not most_valued or \
+                        most_valued[VALUE] < food_item.current_value():
+                    most_valued[TYPE] = shelf_type
+                    most_valued[VALUE] = food_item.current_value()
+                    most_valued[INDEX] = idx
+        return most_valued
 
 
 _food_holder = FoodHolder(_shelves)
