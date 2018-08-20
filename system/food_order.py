@@ -1,4 +1,5 @@
 from datetime import datetime
+import dateutil.parser
 
 NAME = 'name'
 TEMP = 'temp'
@@ -14,7 +15,10 @@ class FoodOrder:
         self.temp = kwargs.get(TEMP)
         self.shelf_life = kwargs.get(SHELF_LIFE)
         self.decay_rate = kwargs.get(DECAY_RATE)
-        self.order_entered_time = kwargs.get(TIME_ENTERED, datetime.now())
+
+        time_st = kwargs.get(TIME_ENTERED)
+        self.order_entered_time = dateutil.parser.parse(time_st) if time_st \
+            else datetime.now()
 
     def current_value(self, is_overflow=False):
         current_time_millis = datetime.now()
@@ -34,6 +38,6 @@ class FoodOrder:
             TEMP: self.temp,
             SHELF_LIFE: self.shelf_life,
             DECAY_RATE: self.decay_rate,
-            TIME_ENTERED: self.order_entered_time
+            TIME_ENTERED: str(self.order_entered_time.isoformat())
         }
 

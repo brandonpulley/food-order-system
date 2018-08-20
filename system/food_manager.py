@@ -1,3 +1,4 @@
+import json
 import sys
 import threading
 from datetime import datetime, timedelta
@@ -71,7 +72,8 @@ def _add_order(order: dict):
 
     food_order = FoodOrder(**order)
     _food_holder.add_food_order(food_order)
-    print('adding order. Current state of shelves::\n', _food_holder.shelves)
+    print('adding order. Current state of shelves::\n',
+          json.dumps(_food_holder.shelves, sort_keys=True, indent=4))
 
 
 def _deliver_order():
@@ -80,7 +82,8 @@ def _deliver_order():
         is_delivery=True, is_highest=False)
     print('from this shelf: ', from_shelf,
           ', this item was delivered: ', delivered_item)
-    print('current state of shelves::\n', _food_holder.shelves)
+    print('current state of shelves::\n',
+          json.dumps(_food_holder.shelves, sort_keys=True, indent=4))
 
 
 def _dispatch_drivers():
