@@ -76,9 +76,10 @@ def _add_order(order: dict):
 
 def _deliver_order():
     # remove the least-valued item from the stack
-    removed_type = _food_holder.remove_highest_lowest_order(
+    delivered_item, from_shelf = _food_holder.remove_highest_lowest_order(
         is_delivery=True, is_highest=False)
-    print('driver delivered this type of item: ', removed_type)
+    print('from this shelf: ', from_shelf,
+          ', this item was delivered: ', delivered_item)
 
 
 def _dispatch_drivers():
@@ -143,16 +144,17 @@ class FoodHolder:
         :return: The shelf-type of the item that was removed
         """
         self._get_lock.acquire()
-        removed_type = None
+        removed_item = None
+        from_shelf = None
         try:
-            removed_type = self._remove_highest_lowest_order(
+            removed_item, from_shelf = self._remove_highest_lowest_order(
                 shelf_types=shelf_types,
                 is_delivery=is_delivery,
                 is_highest=is_highest
             )
         finally:
             self._get_lock.release()
-            return removed_type
+            return removed_item, from_shelf
 
     def _remove_highest_lowest_order(self, shelf_types: [] = None,
                                      is_delivery=False, is_highest=False):
@@ -167,13 +169,16 @@ class FoodHolder:
                 self.shelves[item_to_remove[TYPE]][ORDERS]
                     .pop(item_to_remove[INDEX])
             )
+
+            return self.delivered_bucket[-1], item_to_remove[TYPE]
         else:
             self.waste_bucket.append(
                 self.shelves[item_to_remove[TYPE]][ORDERS]
                     .pop(item_to_remove[INDEX])
             )
+            print('out of space, removing this order: ', self.waste_bucket[-1])
 
-        return item_to_remove[TYPE]
+            return self.waste_bucket[-1], item_to_remove[TYPE]
 
     def _remove_zero_value_orders(self):
         for key, shelf in self.shelves.items():
@@ -183,6 +188,8 @@ class FoodHolder:
                     self.zero_value_bucket.append(
                         shelf[ORDERS].pop(idx))
                     self.shelves[key] = shelf
+                    print('this item has no value and is now removed: ',
+                          self.zero_value_bucket[-1])
 
     def _add_food_order(self, food_order):
         self._remove_zero_value_orders()
@@ -207,8 +214,9 @@ class FoodHolder:
 
         if len(self.shelves[OVERFLOW][ORDERS]) >= \
                 self.shelves[OVERFLOW][MAX]:
-            add_shelf_type = self.remove_highest_lowest_order([order_type,
-                                                               OVERFLOW])
+            removed_item, add_shelf_type = \
+                self.remove_highest_lowest_order([order_type,
+                                                  OVERFLOW])
         else:
             add_shelf_type = OVERFLOW
 

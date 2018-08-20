@@ -12,5 +12,8 @@ log = app.logger
 # load routes
 from server import routes
 
-http_server = WSGIServer(('', 8080), app)
-http_server.serve_forever()
+
+def start_server():
+
+    http_server = WSGIServer(('', 8080), app)
+    http_server.serve_forever()
