@@ -68,3 +68,9 @@ Each statement will also display the order that has been added or removed
 
 When an order has been either added or delivered the contents of all of the
 shelves are printed out as well
+
+
+## Related Reading
+
+Check out the [algorithm README](README_algo.md) for information on how the
+items are discarded when the shelves are at capacity
