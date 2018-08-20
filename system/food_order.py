@@ -4,8 +4,6 @@ NAME = 'name'
 TEMP = 'temp'
 SHELF_LIFE = 'shelfLife'
 DECAY_RATE = 'decayRate'
-
-
 TIME_ENTERED = 'time_entered'
 
 

@@ -14,24 +14,32 @@ VALUE = 'value'
 TYPE = 'type'
 INDEX = 'index'
 MAX = 'max'
-ORDERS = 'orders'
-OVERFLOW = 'overflow'
-TEMP_HOT = 'hot'
-TEMP_COLD = 'cold'
-TEMP_FROZEN = 'frozen'
 
-FOOD_ORDER_TIME_DELAY = 0.25
+OVERFLOW = 'overflow'
+HOT = 'hot'
+COLD = 'cold'
+FROZEN = 'frozen'
+
+ORDERS = 'orders'
+SHELVES = 'shelves'
+WASTE_BUCKET = 'overflow_waste'
+ZERO_VALUE_BUCKET = 'no_value_items'
+DELIVERED = 'delivered_items'
+
+
+FOOD_ORDER_INPUT_DELAY = 0.25
+DISPATCH_DRIVER_DELAY = float(1.0)/float(3.0)
 
 _shelves = {
-    TEMP_HOT: {
+    HOT: {
         ORDERS: [],
         MAX: HOT_MAX_COUNT
     },
-    TEMP_COLD: {
+    COLD: {
         ORDERS: [],
         MAX: COLD_MAX_COUNT
     },
-    TEMP_FROZEN: {
+    FROZEN: {
         ORDERS: [],
         MAX: FROZEN_MAX_COUNT
     }
@@ -40,15 +48,11 @@ _shelves = {
 _threads = []
 
 
-def add_orders(orders_json_array: []):
-
-    # dispatch_thread = threading.Thread(target=_dispatch_drivers)
-    # _threads.append(dispatch_thread)
-    # dispatch_thread.start()
+def request_orders(orders_json_array: []):
 
     for order_dict in orders_json_array:
 
-        sleep(FOOD_ORDER_TIME_DELAY)
+        sleep(FOOD_ORDER_INPUT_DELAY)
 
         order_thread = threading.Thread(target=_add_order, args=(order_dict, ))
         _threads.append(order_thread)
@@ -58,17 +62,9 @@ def add_orders(orders_json_array: []):
 
     _dispatch_drivers()
 
-    # TODO: While loop to clean up running threads. print for now
-    for thread in _threads:
-        pass
-
-    while _food_holder.has_food():
-        print('still need to deliver some food.... just waiting here')
-
-    return {'shelves': _food_holder.shelves,
-            'waste_bucket': _food_holder.waste_bucket,
-            'zero_value_bucket': _food_holder.zero_value_bucket,
-            'delivered': _food_holder.delivered_bucket}
+    return {WASTE_BUCKET: _food_holder.waste_bucket,
+            ZERO_VALUE_BUCKET: _food_holder.zero_value_bucket,
+            DELIVERED: _food_holder.delivered_bucket}
 
 
 def _add_order(order: dict):
@@ -79,18 +75,17 @@ def _add_order(order: dict):
 
 
 def _deliver_order():
-    print('dispatching driver')
     # remove the least-valued item from the stack
-    _food_holder.remove_highest_lowest_order(is_delivery=True, is_highest=True)
+    removed_type = _food_holder.remove_highest_lowest_order(
+        is_delivery=True, is_highest=False)
+    print('driver delivered this type of item: ', removed_type)
 
 
 def _dispatch_drivers():
-    # TODO: make sure this starts after orders have already started coming in
-    # AND Thread each dispatch
     food_check_expiration = datetime.now() + timedelta(seconds=3)
     while datetime.now() < food_check_expiration:
 
-        sleep(float(1.0)/float(3.0))
+        sleep(DISPATCH_DRIVER_DELAY)
 
         driver_thread = threading.Thread(target=_deliver_order)
         _threads.append(driver_thread)
@@ -147,6 +142,20 @@ class FoodHolder:
         for removing the highest-priced item
         :return: The shelf-type of the item that was removed
         """
+        self._get_lock.acquire()
+        removed_type = None
+        try:
+            removed_type = self._remove_highest_lowest_order(
+                shelf_types=shelf_types,
+                is_delivery=is_delivery,
+                is_highest=is_highest
+            )
+        finally:
+            self._get_lock.release()
+            return removed_type
+
+    def _remove_highest_lowest_order(self, shelf_types: [] = None,
+                                     is_delivery=False, is_highest=False):
         self._remove_zero_value_orders()
         if is_highest:
             item_to_remove = self._find_most_valued_item(shelf_types)
@@ -211,7 +220,7 @@ class FoodHolder:
         """
         Finds the order with the most value from either the given shelf type
         or from the overflow shelf, whichever contains the least-valued item
-        :param shelf_type: the shelf type to include in the search
+        :param shelf_types: the shelf types to include in the search
         :return: the item with the least value
         """
 
@@ -235,12 +244,11 @@ class FoodHolder:
         """
         Finds the order with the least value from either the given shelf type
         or from the overflow shelf, whichever contains the least-valued item
-        :param shelf_type: the shelf type to include in the search
+        :param shelf_types: the shelf types to include in the search
         :return: the item with the least value
         """
 
         if not shelf_types:
-            print('looking through all shelves')
             shelf_types = [key for key in self.shelves.keys()]
 
         most_valued = {}
